@@ -5,7 +5,8 @@
 #include "omp.h"
 #include "Util.hpp"
 #include <set>
-
+#include <random>
+#include <cmath>
 #define INTYPE double
 #define RTYPE std::complex<INTYPE>
 #define CACHELINE 64
@@ -25,20 +26,29 @@ void check(RTYPE refpsi, RTYPE psi) {
     return;
     //cout << "pass" << endl;
 };
-int pick_vec(std::vector<int> & v) {
+int pick_vec(std::mt19937 & mt, std::vector<int> & v) {
   const int n = v.size();
-  int r = rand() % n; // random index in vector
+  if (n == 0) {
+    cout << "Crap" << endl;
+    exit(1);
+  }
+  std::uniform_real_distribution<double> dist(0, n-1);
+  int r = dist(mt); // random index in vector
   int ret = v[r]; // get the value
   v.erase(v.begin() + r); // remove returned element
   return ret;
 }
-void fill_index(const int n, int* c, const int cache_line_bytes, const float fill) {
+void fill_index(const int n, int* c, const int cache_line_bytes, const float ratio) {
+  std::random_device rd;
+  std::mt19937 mt(rd());
+
   int cache_line = cache_line_bytes / sizeof(int);
   int i, j;
   int num_cache_lines = n/cache_line; // full cache lines
   int remainder = n % cache_line;  // remaining elements
   int r = remainder > 0 ? 1 : 0; // add a cache line if there's a remainder
-  int num_stride = cache_line * fill; // filled with stride 1
+  int num_stride = cache_line * ratio; // filled with stride 1
+  if (num_stride < 1) num_stride++; // why cna't I use min?
   int num_rand = cache_line - num_stride; // fillled randomly
 
   // create a vector of leftover indices
@@ -65,7 +75,7 @@ void fill_index(const int n, int* c, const int cache_line_bytes, const float fil
     }
     for (j = 0; j < num_rand; j++) {
       if (i * cache_line + num_stride + j < n)
-        c[i * cache_line + num_stride + j] = pick_vec(leftover);
+        c[i * cache_line + num_stride + j] = pick_vec(mt, leftover);
     }
   }
 
@@ -78,9 +88,21 @@ RTYPE calc0(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1,
     psi += detValues0[det0[i]] * detValues1[det1[i]];
   return psi;
 }
-RTYPE calc1(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, vector<int> & det0, vector<int> & det1) {
+RTYPE calc1(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, const vector<int> & det0, const vector<int> & det1) {
   INTYPE psi_r = 0, psi_i = 0;
   RTYPE psi = 0;
+  for (int i = 0; i < N; i++) 
+  {
+    psi_r += detValues0[det0[i]].real() * detValues1[det1[i]].real() - detValues0[det0[i]].imag() * detValues1[det1[i]].imag();
+    psi_i += detValues0[det0[i]].real() * detValues1[det1[i]].real() + detValues0[det0[i]].imag() * detValues1[det1[i]].imag();
+  }
+  psi = complex<INTYPE>(psi_r, psi_i);
+  return psi;
+}
+RTYPE calc1_simdht(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, const vector<int> & det0, const vector<int> & det1) {
+  INTYPE psi_r = 0, psi_i = 0;
+  RTYPE psi = 0;
+#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
   for (int i = 0; i < N; i++) 
   {
     psi_r += detValues0[det0[i]].real() * detValues1[det1[i]].real() - detValues0[det0[i]].imag() * detValues1[det1[i]].imag();
@@ -107,7 +129,7 @@ RTYPE calc3(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE*
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
-#pragma omp parallel for simd reduction(+:psi_r, psi_i)
+#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
   for (int i = 0; i < N; i++) 
   {
     psi_r += realdetValues0[det0[i]] * realdetValues1[det1[i]] - imagdetValues0[det0[i]] * imagdetValues1[det1[i]];
@@ -116,17 +138,17 @@ RTYPE calc3(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE*
   psi = complex<INTYPE>(psi_r, psi_i);
   return psi;
 }
+
 int main(int argc, char** argv) {
-  srand(1234);
 
   const int N = atoi(argv[1]);
   const int M = atoi(argv[2]);
-  const float fill = atof(argv[3]);
+  const float R = atof(argv[3]);
   float size = (2 * 2 * sizeof(INTYPE)) + (2 * sizeof(int)) * N / MEGA;
   cout << "Using N = " << N << endl;
   cout << "Using M(outer loop) = " << M << endl;
   cout << "Footprint = " << size << " MB" << endl;
-  cout << "Using fill = " << fill << endl;
+  cout << "Using fill = " << R << endl;
 
 
   std::vector<int>det0(N);
@@ -150,8 +172,8 @@ int main(int argc, char** argv) {
 
   cout << "Initialize... det0, det1\n";
   double t = omp_get_wtime();
-  fill_index(N, det0.data(), CACHELINE , fill);
-  fill_index(N, det1.data(), CACHELINE , fill);
+  fill_index(N, det0.data(), CACHELINE , R);
+  fill_index(N, det1.data(), CACHELINE , R);
   t = omp_get_wtime() - t;
   cout << t << " sec" << endl;
 
@@ -161,6 +183,14 @@ int main(int argc, char** argv) {
 #pragma noinline
     psiref = calc0(N, detValues0, detValues1, det0, det1);
   t0 = omp_get_wtime() - t0;
+
+  double t1ht = omp_get_wtime();
+  for (int i = 0; i < M; i++)
+#pragma noinline
+    psi = calc1_simdht(N, detValues0, detValues1, det0, det1);
+  t1ht = omp_get_wtime() - t1ht;
+  check(psiref, psi);
+
 
   double t1 = omp_get_wtime();
   for (int i = 0; i < M; i++)
@@ -186,9 +216,9 @@ int main(int argc, char** argv) {
   cout << "-------------- RESULT -------------------" << endl;
   cout << std::left << std::setw(8) << t0/t0 << std::endl;
   cout << std::left << std::setw(8) << t0/t1 << std::endl;
+  cout << std::left << std::setw(8) << t0/t1ht << std::endl;
   cout << std::left << std::setw(8) << t0/t2 << std::endl;
   cout << std::left << std::setw(8) << t0/t3 << std::endl;
-
 
   return 0;
 }
