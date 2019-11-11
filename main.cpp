@@ -74,7 +74,7 @@ void fill_index(const int n, int* c, const int cache_line_bytes, const float rat
         c[i * cache_line + j] = i * cache_line + j;
     }
     for (j = 0; j < num_rand; j++) {
-      if (i * cache_line + num_stride + j < n)
+      if (leftover.size() > 0)
         c[i * cache_line + num_stride + j] = pick_vec(mt, leftover);
     }
   }
