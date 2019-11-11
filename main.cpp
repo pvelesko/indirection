@@ -73,34 +73,27 @@ void fill_index(const int n, int* c, const int cache_line_bytes, const float fil
 }
 RTYPE calc0(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, vector<int> & det0, vector<int> & det1) {
   RTYPE psi = 0;
-  cout << "Compute Complex" << endl;
   double t = omp_get_wtime();
   for (int i = 0; i < N; i++)
     psi += detValues0[det0[i]] * detValues1[det1[i]];
-  t = omp_get_wtime() - t;
-  cout << t << " sec" << endl;
   return psi;
 }
 RTYPE calc1(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, vector<int> & det0, vector<int> & det1) {
   INTYPE psi_r = 0, psi_i = 0;
   RTYPE psi = 0;
-  cout << "Compute Real Imag" << endl;
   auto t = omp_get_wtime();
   for (int i = 0; i < N; i++) 
   {
     psi_r += detValues0[det0[i]].real() * detValues1[det1[i]].real();
     psi_i += detValues0[det0[i]].imag() * detValues1[det1[i]].imag();
   }
-  t = omp_get_wtime() - t;
   psi = complex<INTYPE>(psi_r, psi_i);
-  cout << t << " sec" << endl;
   return psi;
 }
 RTYPE calc2(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, vector<int> & det0, vector<int> & det1) {
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
-  cout << "Compute Complex Seperate SoA HT" << endl;
   auto t = omp_get_wtime();
 #pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
   for (int i = 0; i < N; i++) 
@@ -108,35 +101,31 @@ RTYPE calc2(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, v
     psi_r += mydetValues0.real(det0[i]) * mydetValues1.real(det1[i]);
     psi_i += mydetValues0.imag(det0[i]) * mydetValues1.imag(det1[i]);
   }
-  t = omp_get_wtime() - t;
   psi = complex<INTYPE>(psi_r, psi_i);
-  cout << t << " sec" << endl;
   return psi;
 }
 RTYPE calc3(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, vector<int> & det0, vector<int> & det1) {
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
-  cout << "Compute...";
-  auto t = omp_get_wtime();
 #pragma omp parallel for simd reduction(+:psi_r, psi_i)
   for (int i = 0; i < N; i++) 
   {
     psi_r += realdetValues0[det0[i]] * realdetValues1[det1[i]];
     psi_i += imagdetValues0[det0[i]] * imagdetValues1[det1[i]];
   }
-  t = omp_get_wtime() - t;
   psi = complex<INTYPE>(psi_r, psi_i);
-  cout << t << " sec" << endl;
   return psi;
 }
 int main(int argc, char** argv) {
   srand(1234);
 
   const int N = atoi(argv[1]);
-  const float fill = atof(argv[2]);
+  const int M = atoi(argv[2]);
+  const float fill = atof(argv[3]);
   float size = (2 * 2 * sizeof(INTYPE)) + (2 * sizeof(int)) * N / MEGA;
   cout << "Using N = " << N << endl;
+  cout << "Using M(outer loop) = " << M << endl;
   cout << "Footprint = " << size << " MB" << endl;
   cout << "Using fill = " << fill << endl;
 
@@ -151,7 +140,7 @@ int main(int argc, char** argv) {
   INTYPE imagdetValues0[N];
   INTYPE realdetValues1[N];
   INTYPE imagdetValues1[N];
-  RTYPE psi;
+  RTYPE psi, psiref;
 
   cout << "Initialize... det0, det1\n";
   double t = omp_get_wtime();
@@ -160,15 +149,31 @@ int main(int argc, char** argv) {
   t = omp_get_wtime() - t;
   cout << t << " sec" << endl;
 
-  RTYPE psiref = calc0(N, detValues0, detValues1, det0, det1);
 
-  psi = calc1(N, detValues0, detValues1, det0, det1);
+  double t0 = omp_get_wtime();
+  for (int i = 0; i < M; i++)
+    psiref = calc0(N, detValues0, detValues1, det0, det1);
+  t0 = omp_get_wtime() - t0;
+
+  double t1 = omp_get_wtime();
+  for (int i = 0; i < M; i++)
+#pragma noinline
+    psi = calc1(N, detValues0, detValues1, det0, det1);
+  t1 = omp_get_wtime() - t1;
   check(psiref, psi);
 
-  psi = calc2(N, mydetValues0, mydetValues1, det0, det1);
+  double t2 = omp_get_wtime();
+  for (int i = 0; i < M; i++)
+#pragma noinline
+    psi = calc2(N, mydetValues0, mydetValues1, det0, det1);
+  t2 = omp_get_wtime() - t2;
   check(psiref, psi);
 
-  psi = calc3(N, realdetValues0, realdetValues1, imagdetValues0, imagdetValues1, det0, det1);
+  double t3 = omp_get_wtime();
+  for (int i = 0; i < M; i++)
+#pragma noinline
+    psi = calc3(N, realdetValues0, realdetValues1, imagdetValues0, imagdetValues1, det0, det1);
+  t3 = omp_get_wtime() - t3;
   check(psiref, psi);
 
 
