@@ -8,6 +8,8 @@
 #define INTYPE double
 #define RTYPE std::complex<INTYPE>
 #define CACHELINE 64
+#define MEGA 1000000.f
+#define GIGA 1000000000.f
 
 using namespace std;
 
@@ -71,7 +73,7 @@ void fill_index(const int n, int* c, const int cache_line_bytes, const float fil
 }
 RTYPE calc0(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, vector<int> & det0, vector<int> & det1) {
   RTYPE psi = 0;
-  cout << "Compute Templated Original...";
+  cout << "Compute Complex" << endl;
   double t = omp_get_wtime();
   for (int i = 0; i < N; i++)
     psi += detValues0[det0[i]] * detValues1[det1[i]];
@@ -82,7 +84,7 @@ RTYPE calc0(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1,
 RTYPE calc1(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, vector<int> & det0, vector<int> & det1) {
   INTYPE psi_r = 0, psi_i = 0;
   RTYPE psi = 0;
-  cout << "Compute seperately";
+  cout << "Compute Real Imag" << endl;
   auto t = omp_get_wtime();
   for (int i = 0; i < N; i++) 
   {
@@ -94,17 +96,55 @@ RTYPE calc1(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1,
   cout << t << " sec" << endl;
   return psi;
 }
+RTYPE calc2(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, vector<int> & det0, vector<int> & det1) {
+  RTYPE psi = 0;
+  INTYPE psi_r = 0;
+  INTYPE psi_i = 0;
+  cout << "Compute Complex Seperate SoA HT" << endl;
+  auto t = omp_get_wtime();
+#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
+  for (int i = 0; i < N; i++) 
+  {
+    psi_r += mydetValues0.real(det0[i]) * mydetValues1.real(det1[i]);
+    psi_i += mydetValues0.imag(det0[i]) * mydetValues1.imag(det1[i]);
+  }
+  t = omp_get_wtime() - t;
+  psi = complex<INTYPE>(psi_r, psi_i);
+  cout << t << " sec" << endl;
+  return psi;
+}
+RTYPE calc3(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, vector<int> & det0, vector<int> & det1) {
+  RTYPE psi = 0;
+  INTYPE psi_r = 0;
+  INTYPE psi_i = 0;
+  cout << "Compute...";
+  auto t = omp_get_wtime();
+#pragma omp parallel for simd reduction(+:psi_r, psi_i)
+  for (int i = 0; i < N; i++) 
+  {
+    psi_r += realdetValues0[det0[i]] * realdetValues1[det1[i]];
+    psi_i += imagdetValues0[det0[i]] * imagdetValues1[det1[i]];
+  }
+  t = omp_get_wtime() - t;
+  psi = complex<INTYPE>(psi_r, psi_i);
+  cout << t << " sec" << endl;
+  return psi;
+}
 int main(int argc, char** argv) {
   srand(1234);
 
   const int N = atoi(argv[1]);
   const float fill = atof(argv[2]);
+  float size = (2 * 2 * sizeof(INTYPE)) + (2 * sizeof(int)) * N / MEGA;
   cout << "Using N = " << N << endl;
+  cout << "Footprint = " << size << " MB" << endl;
   cout << "Using fill = " << fill << endl;
-  std::vector<int>det0(N, 0);
-  std::vector<int>det1(N, 0);
-  std::vector<RTYPE>detValues0(N);
-  std::vector<RTYPE>detValues1(N);
+
+
+  std::vector<int>det0(N);
+  std::vector<int>det1(N);
+  std::vector<RTYPE>detValues0(N, complex<INTYPE>(1, 1));
+  std::vector<RTYPE>detValues1(N, complex<INTYPE>(1, 1));
   ComplexSoA mydetValues0(N);
   ComplexSoA mydetValues1(N);
   INTYPE realdetValues0[N];
@@ -120,54 +160,17 @@ int main(int argc, char** argv) {
   t = omp_get_wtime() - t;
   cout << t << " sec" << endl;
 
-  cout << "Initializing...";
-  t = omp_get_wtime();
-  for (int i = 0; i < N; i++)
-  {
-    int ii=0, kk=0;
-    detValues0[i] = complex<INTYPE>(ii, kk);
-    detValues1[i] = complex<INTYPE>(kk, ii);
-  }
-  t = omp_get_wtime() - t;
-  cout << t << " sec" << endl;
-
   RTYPE psiref = calc0(N, detValues0, detValues1, det0, det1);
+
   psi = calc1(N, detValues0, detValues1, det0, det1);
   check(psiref, psi);
-//
-//
-//  psi = 0;
-//  psi_r = 0;
-//  psi_i = 0;
-//  cout << "Compute...";
-//  t = omp_get_wtime();
-//#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
-//  for (int i = 0; i < N; i++) 
-//  {
-//    psi_r += mydetValues0.real(det0[i]) * mydetValues1.real(det1[i]);
-//    psi_i += mydetValues0.imag(det0[i]) * mydetValues1.imag(det1[i]);
-//  }
-//  t = omp_get_wtime() - t;
-//  psi = complex<INTYPE>(psi_r, psi_i);
-//  cout << t << " sec" << endl;
-//  check(psiref, psi);
-//
-//
-//  psi = 0;
-//  psi_r = 0;
-//  psi_i = 0;
-//  cout << "Compute...";
-//  t = omp_get_wtime();
-//#pragma omp parallel for simd reduction(+:psi_r, psi_i)
-//  for (int i = 0; i < N; i++) 
-//  {
-//    psi_r += realdetValues0[det0[i]] * realdetValues1[det1[i]];
-//    psi_i += imagdetValues0[det0[i]] * imagdetValues1[det1[i]];
-//  }
-//  t = omp_get_wtime() - t;
-//  psi = complex<INTYPE>(psi_r, psi_i);
-//  cout << t << " sec" << endl;
-//  check(psiref, psi);
+
+  psi = calc2(N, mydetValues0, mydetValues1, det0, det1);
+  check(psiref, psi);
+
+  psi = calc3(N, realdetValues0, realdetValues1, imagdetValues0, imagdetValues1, det0, det1);
+  check(psiref, psi);
+
 
   return 0;
 }
