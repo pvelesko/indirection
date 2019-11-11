@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
   const int N = atoi(argv[1]);
   const int M = atoi(argv[2]);
   const float R = atof(argv[3]);
-  float size = (2 * 2 * sizeof(INTYPE)) + (2 * sizeof(int)) * N / MEGA;
+  float size = ((2 * 2 * sizeof(INTYPE)) + (2 * sizeof(int))) * N / MEGA;
   cout << "Using N = " << N << endl;
   cout << "Using M(outer loop) = " << M << endl;
   cout << "Footprint = " << size << " MB" << endl;
