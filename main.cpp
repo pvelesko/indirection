@@ -76,7 +76,8 @@ void fill_index(const int n, int* c, const int cache_line_bytes, const float rat
         c[i * cache_line + j] = i * cache_line + j;
     }
     for (j = 0; j < num_rand; j++) {
-      if (leftover.size() > 0)
+      // TODO bug here
+      if (leftover.size() > 0 and i * cache_line + num_stride + j < n)
         c[i * cache_line + num_stride + j] = pick_vec(leftover);
     }
   }
@@ -237,6 +238,18 @@ int main(int argc, char** argv) {
   cout << std::left << std::setprecision(3) << std::setw(10) << t0/t2 << " Test2 Real/Imag SIMD HT" <<  std::endl;
   cout << std::left << std::setprecision(3) << std::setw(10) << t0/t3 << " Test3 ComplexSoA" <<  std::endl;
   cout << std::left << std::setprecision(3) << std::setw(10) << t0/t4 << " Test4 Complex Arrays" <<  std::endl;
+
+  //free(det0);
+  //free(det1);
+  ////free(detValues0);
+  ////free(detValues1);
+  ////~mydetValues0();
+  ////~mydetValues1();
+  //free(realdetValues0);
+  //free(imagdetValues0);
+  //free(realdetValues1);
+  //free(imagdetValues1);
+
 
   return 0;
 }
