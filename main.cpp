@@ -13,6 +13,7 @@
 #define MEGA 1000000.f
 #define GIGA 1000000000.f
 #define CRINTPTR const int* __restrict__
+#define CRINTYPEPTR const INTYPE* __restrict__
 
 using namespace std;
 
@@ -126,7 +127,7 @@ RTYPE calc3(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, C
   psi = complex<INTYPE>(psi_r, psi_i);
   return psi;
 }
-RTYPE calc4(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, CRINTPTR det0, CRINTPTR det1) {
+RTYPE calc4(const int N, CRINTYPEPTR realdetValues0, CRINTYPEPTR realdetValues1, CRINTYPEPTR imagdetValues0, CRINTYPEPTR imagdetValues1, CRINTPTR det0, CRINTPTR det1) {
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
