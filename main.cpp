@@ -14,7 +14,9 @@
 #define GIGA 1000000000.f
 #define CRINTPTR const int* __restrict__
 #define CRINTYPEPTR const INTYPE* __restrict__
-
+#ifndef DEBUG
+#define DEBUG 0
+#endif
 using namespace std;
 
 std::random_device rd;
@@ -233,6 +235,7 @@ int main(int argc, char** argv) {
 
   cout << "-------------- RESULT -------------------" << endl;
   cout << "OpenMP Threads: " << num_t << endl;
+  cout << std::left << std::setprecision(3) << std::setw(10) << t0    << " Runtime" <<  std::endl;
   cout << std::left << std::setprecision(3) << std::setw(10) << t0/t0 << " Test0 Complex" <<  std::endl;
   cout << std::left << std::setprecision(3) << std::setw(10) << t0/t1 << " Test1 Real/Imag" << std::endl;
   cout << std::left << std::setprecision(3) << std::setw(10) << t0/t2 << " Test2 Real/Imag SIMD HT" <<  std::endl;
