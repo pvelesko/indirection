@@ -126,7 +126,7 @@ RTYPE calc3(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, C
   psi = complex<INTYPE>(psi_r, psi_i);
   return psi;
 }
-RTYPE calc4(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, int* det0, int*  det1) {
+RTYPE calc4(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, CRINTPTR det0, CRINTPTR det1) {
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
@@ -143,7 +143,7 @@ RTYPE calc4(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE*
 int main(int argc, char** argv) {
   int num_t;
 
-  std::mt19937 mt(rd());
+//  std::mt19937 mt(rd());
   #pragma omp parallel
   {
     #pragma omp master
@@ -159,16 +159,16 @@ int main(int argc, char** argv) {
   cout << "Using fill = " << R << endl;
 
 
-  int det0[N];
-  int det1[N];
+  int* det0 = static_cast<int*>(malloc(sizeof(int) * N));
+  int* det1 = static_cast<int*>(malloc(sizeof(int) * N));
   std::vector<RTYPE>detValues0(N, complex<INTYPE>(1, 1));
   std::vector<RTYPE>detValues1(N, complex<INTYPE>(1, 1));
   ComplexSoA mydetValues0(N);
   ComplexSoA mydetValues1(N);
-  INTYPE realdetValues0[N];
-  INTYPE imagdetValues0[N];
-  INTYPE realdetValues1[N];
-  INTYPE imagdetValues1[N];
+  INTYPE* realdetValues0 = static_cast<INTYPE*>(malloc(sizeof(INTYPE) * N));
+  INTYPE* imagdetValues0 = static_cast<INTYPE*>(malloc(sizeof(INTYPE) * N));
+  INTYPE* realdetValues1 = static_cast<INTYPE*>(malloc(sizeof(INTYPE) * N));
+  INTYPE* imagdetValues1 = static_cast<INTYPE*>(malloc(sizeof(INTYPE) * N));
   RTYPE psi, psiref;
 
   for (int i = 0; i < N; i++) {
@@ -176,6 +176,10 @@ int main(int argc, char** argv) {
     mydetValues1._real[i] = detValues1[i].real();
     mydetValues0._imag[i] = detValues0[i].imag();
     mydetValues1._imag[i] = detValues1[i].imag();
+    realdetValues0[i] = detValues0[i].real();
+    realdetValues1[i] = detValues1[i].real();
+    imagdetValues0[i] = detValues0[i].imag();
+    imagdetValues1[i] = detValues1[i].imag();
   }
 
   cout << "Initialize... det0, det1\n";
@@ -186,12 +190,14 @@ int main(int argc, char** argv) {
   cout << t << " sec" << endl;
 
 
+  cout << "calc0\n";
   double t0 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
     psiref = calc0(N, detValues0, detValues1, det0, det1);
   t0 = omp_get_wtime() - t0;
 
+  cout << "calc1\n";
   double t1 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
@@ -199,6 +205,7 @@ int main(int argc, char** argv) {
   t1 = omp_get_wtime() - t1;
   check(psiref, psi);
 
+  cout << "calc2\n";
   double t2 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
@@ -206,6 +213,7 @@ int main(int argc, char** argv) {
   t2 = omp_get_wtime() - t2;
   check(psiref, psi);
 
+  cout << "calc3\n";
   double t3 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
@@ -213,6 +221,7 @@ int main(int argc, char** argv) {
   t3 = omp_get_wtime() - t3;
   check(psiref, psi);
 
+  cout << "calc4\n";
   double t4 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
