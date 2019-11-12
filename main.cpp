@@ -12,8 +12,12 @@
 #define CACHELINE 64
 #define MEGA 1000000.f
 #define GIGA 1000000000.f
+#define CRINTPTR const int* __restrict__
 
 using namespace std;
+
+std::random_device rd;
+std::mt19937 mt(rd());
 
 void check(RTYPE refpsi, RTYPE psi) {
   if (abs(psi - refpsi) > 0.01f)
@@ -26,7 +30,7 @@ void check(RTYPE refpsi, RTYPE psi) {
     return;
     //cout << "pass" << endl;
 };
-int pick_vec(std::mt19937 & mt, std::vector<int> & v) {
+int pick_vec(std::vector<int> & v) {
   const int n = v.size();
   if (n == 0) {
     cout << "Crap" << endl;
@@ -39,9 +43,6 @@ int pick_vec(std::mt19937 & mt, std::vector<int> & v) {
   return ret;
 }
 void fill_index(const int n, int* c, const int cache_line_bytes, const float ratio) {
-  std::random_device rd;
-  std::mt19937 mt(rd());
-
   int cache_line = cache_line_bytes / sizeof(int);
   int i, j;
   int num_cache_lines = n/cache_line; // full cache lines
@@ -75,20 +76,20 @@ void fill_index(const int n, int* c, const int cache_line_bytes, const float rat
     }
     for (j = 0; j < num_rand; j++) {
       if (leftover.size() > 0)
-        c[i * cache_line + num_stride + j] = pick_vec(mt, leftover);
+        c[i * cache_line + num_stride + j] = pick_vec(leftover);
     }
   }
 
 //  for (i = 0; i < n; i++)
 //    std::cout << "c[" << i << "] = " << c[i] << std::endl;
 }
-RTYPE calc0(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, vector<int> & det0, vector<int> & det1) {
+RTYPE calc0(const int N, vector<RTYPE> & detValues0, vector<RTYPE> & detValues1, CRINTPTR det0, CRINTPTR det1) {
   RTYPE psi = 0;
   for (int i = 0; i < N; i++)
     psi += detValues0[det0[i]] * detValues1[det1[i]];
   return psi;
 }
-RTYPE calc1(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, const vector<int> & det0, const vector<int> & det1) {
+RTYPE calc1(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, CRINTPTR det0, CRINTPTR det1) {
   INTYPE psi_r = 0, psi_i = 0;
   RTYPE psi = 0;
   for (int i = 0; i < N; i++) 
@@ -99,7 +100,7 @@ RTYPE calc1(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> &
   psi = complex<INTYPE>(psi_r, psi_i);
   return psi;
 }
-RTYPE calc1_simdht(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, const vector<int> & det0, const vector<int> & det1) {
+RTYPE calc2(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, CRINTPTR det0, CRINTPTR det1) {
   INTYPE psi_r = 0, psi_i = 0;
   RTYPE psi = 0;
 #pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
@@ -111,7 +112,7 @@ RTYPE calc1_simdht(const int N, const vector<RTYPE> & detValues0, const vector<R
   psi = complex<INTYPE>(psi_r, psi_i);
   return psi;
 }
-RTYPE calc2(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, vector<int> & det0, vector<int> & det1) {
+RTYPE calc3(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, CRINTPTR det0, CRINTPTR det1) {
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
@@ -125,7 +126,7 @@ RTYPE calc2(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, v
   psi = complex<INTYPE>(psi_r, psi_i);
   return psi;
 }
-RTYPE calc3(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, vector<int> & det0, vector<int> & det1) {
+RTYPE calc4(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE* imagdetValues0, INTYPE* imagdetValues1, int* det0, int*  det1) {
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
@@ -140,7 +141,14 @@ RTYPE calc3(const int N, INTYPE* realdetValues0, INTYPE* realdetValues1, INTYPE*
 }
 
 int main(int argc, char** argv) {
+  int num_t;
 
+  std::mt19937 mt(rd());
+  #pragma omp parallel
+  {
+    #pragma omp master
+    num_t = omp_get_num_threads();
+  }
   const int N = atoi(argv[1]);
   const int M = atoi(argv[2]);
   const float R = atof(argv[3]);
@@ -151,8 +159,8 @@ int main(int argc, char** argv) {
   cout << "Using fill = " << R << endl;
 
 
-  std::vector<int>det0(N);
-  std::vector<int>det1(N);
+  int det0[N];
+  int det1[N];
   std::vector<RTYPE>detValues0(N, complex<INTYPE>(1, 1));
   std::vector<RTYPE>detValues1(N, complex<INTYPE>(1, 1));
   ComplexSoA mydetValues0(N);
@@ -172,8 +180,8 @@ int main(int argc, char** argv) {
 
   cout << "Initialize... det0, det1\n";
   double t = omp_get_wtime();
-  fill_index(N, det0.data(), CACHELINE , R);
-  fill_index(N, det1.data(), CACHELINE , R);
+  fill_index(N, det0, CACHELINE , R);
+  fill_index(N, det1, CACHELINE , R);
   t = omp_get_wtime() - t;
   cout << t << " sec" << endl;
 
@@ -183,14 +191,6 @@ int main(int argc, char** argv) {
 #pragma noinline
     psiref = calc0(N, detValues0, detValues1, det0, det1);
   t0 = omp_get_wtime() - t0;
-
-  double t1ht = omp_get_wtime();
-  for (int i = 0; i < M; i++)
-#pragma noinline
-    psi = calc1_simdht(N, detValues0, detValues1, det0, det1);
-  t1ht = omp_get_wtime() - t1ht;
-  check(psiref, psi);
-
 
   double t1 = omp_get_wtime();
   for (int i = 0; i < M; i++)
@@ -202,23 +202,31 @@ int main(int argc, char** argv) {
   double t2 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
-    psi = calc2(N, mydetValues0, mydetValues1, det0, det1);
+    psi = calc2(N, detValues0, detValues1, det0, det1);
   t2 = omp_get_wtime() - t2;
   check(psiref, psi);
 
   double t3 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
-    psi = calc3(N, realdetValues0, realdetValues1, imagdetValues0, imagdetValues1, det0, det1);
+    psi = calc3(N, mydetValues0, mydetValues1, det0, det1);
   t3 = omp_get_wtime() - t3;
   check(psiref, psi);
 
+  double t4 = omp_get_wtime();
+  for (int i = 0; i < M; i++)
+#pragma noinline
+    psi = calc4(N, realdetValues0, realdetValues1, imagdetValues0, imagdetValues1, det0, det1);
+  t4 = omp_get_wtime() - t4;
+  check(psiref, psi);
+
   cout << "-------------- RESULT -------------------" << endl;
-  cout << std::left << std::setw(8) << t0/t0 << std::endl;
-  cout << std::left << std::setw(8) << t0/t1 << std::endl;
-  cout << std::left << std::setw(8) << t0/t1ht << std::endl;
-  cout << std::left << std::setw(8) << t0/t2 << std::endl;
-  cout << std::left << std::setw(8) << t0/t3 << std::endl;
+  cout << "OpenMP Threads: " << num_t << endl;
+  cout << std::left << std::setprecision(3) << std::setw(10) << t0/t0 << " Test0 Complex" <<  std::endl;
+  cout << std::left << std::setprecision(3) << std::setw(10) << t0/t1 << " Test1 Real/Imag" << std::endl;
+  cout << std::left << std::setprecision(3) << std::setw(10) << t0/t2 << " Test2 Real/Imag SIMD HT" <<  std::endl;
+  cout << std::left << std::setprecision(3) << std::setw(10) << t0/t3 << " Test3 ComplexSoA" <<  std::endl;
+  cout << std::left << std::setprecision(3) << std::setw(10) << t0/t4 << " Test4 Complex Arrays" <<  std::endl;
 
   return 0;
 }
