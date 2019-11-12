@@ -107,7 +107,7 @@ RTYPE calc1(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> &
 RTYPE calc2(const int N, const vector<RTYPE> & detValues0, const vector<RTYPE> & detValues1, CRINTPTR det0, CRINTPTR det1) {
   INTYPE psi_r = 0, psi_i = 0;
   RTYPE psi = 0;
-#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
+#pragma omp parallel for simd reduction(+:psi_r, psi_i) 
   for (int i = 0; i < N; i++) 
   {
     psi_r += detValues0[det0[i]].real() * detValues1[det1[i]].real() - detValues0[det0[i]].imag() * detValues1[det1[i]].imag();
@@ -121,7 +121,7 @@ RTYPE calc3(const int N, ComplexSoA & mydetValues0, ComplexSoA & mydetValues1, C
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
   auto t = omp_get_wtime();
-#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
+#pragma omp parallel for simd reduction(+:psi_r, psi_i) 
   for (int i = 0; i < N; i++) 
   {
     psi_r += mydetValues0.real(det0[i]) * mydetValues1.real(det1[i]) - mydetValues0.imag(det0[i]) * mydetValues1.imag(det1[i]);
@@ -134,7 +134,7 @@ RTYPE calc4(const int N, CRINTYPEPTR realdetValues0, CRINTYPEPTR realdetValues1,
   RTYPE psi = 0;
   INTYPE psi_r = 0;
   INTYPE psi_i = 0;
-#pragma omp parallel for simd reduction(+:psi_r, psi_i) schedule(static, 1)
+#pragma omp parallel for simd reduction(+:psi_r, psi_i) 
   for (int i = 0; i < N; i++) 
   {
     psi_r += realdetValues0[det0[i]] * realdetValues1[det1[i]] - imagdetValues0[det0[i]] * imagdetValues1[det1[i]];
@@ -194,14 +194,14 @@ int main(int argc, char** argv) {
   cout << t << " sec" << endl;
 
 
-  cout << "calc0\n";
+  if (DEBUG) cout << "calc0\n";
   double t0 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
     psiref = calc0(N, detValues0, detValues1, det0, det1);
   t0 = omp_get_wtime() - t0;
 
-  cout << "calc1\n";
+  if (DEBUG) cout << "calc1\n";
   double t1 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
   t1 = omp_get_wtime() - t1;
   check(psiref, psi);
 
-  cout << "calc2\n";
+  if (DEBUG) cout << "calc2\n";
   double t2 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
   t2 = omp_get_wtime() - t2;
   check(psiref, psi);
 
-  cout << "calc3\n";
+  if (DEBUG) cout << "calc3\n";
   double t3 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
   t3 = omp_get_wtime() - t3;
   check(psiref, psi);
 
-  cout << "calc4\n";
+  if (DEBUG) cout << "calc4\n";
   double t4 = omp_get_wtime();
   for (int i = 0; i < M; i++)
 #pragma noinline
