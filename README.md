@@ -18,6 +18,7 @@ In real world applications the true layout will fall somewhere in between these 
 ### AoS
 std::complex is a data structure with 2 scalars - real and imaginary.
 Array of std::complex is an Array of Structure data type with the following layout in memory:
+
 ![enter image description here](https://lh3.googleusercontent.com/D3aV96d4XomRyY33u_N8KpQEzBOOubq6AbYqQ5BhUofjYn8kxd0r7lwZw7WeKjP1GVer36Hn0L5wPg)
 
 Consider two extremes:
@@ -29,6 +30,7 @@ Cons: Have to do shuffles; lower vectorization efficiency
 
 ### SoA
 Structure of Arrays layout keeps real and imaginary parts separate
+
 ![enter image description here](https://lh3.googleusercontent.com/F5OXhuB1r99Ajqknmyw7F-baABCijrCMk8UyEJn-8DWgTHa36nTRWib_Fj3S9GepMkYtRmOhxbsyOQ)
 
 Consider two extremes:
